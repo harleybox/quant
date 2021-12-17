@@ -10,6 +10,8 @@
 import data.stock as st
 import pandas as pd
 import numpy as np
+import strategy.base as base
+import matplotlib.pyplot as plt
 
 
 def get_data(start_date, end_date, use_cols, index_symbol='000300.XSHG'):
@@ -26,7 +28,7 @@ def get_data(start_date, end_date, use_cols, index_symbol='000300.XSHG'):
     # 拼接收盘价的容器
     data_concat = pd.DataFrame()
     # 获取股票数据
-    for code in stocks[:8]:
+    for code in stocks[:5]:
         data = st.get_csv_price(code, start_date, end_date, data_type='price',
                                 columns=['date', 'close'])
 
@@ -40,34 +42,46 @@ def get_data(start_date, end_date, use_cols, index_symbol='000300.XSHG'):
 
 
 def momentum(data_concat, shift_n=1, top_n=2):
+    """
+
+    :param data_concat: df
+    :param shift_n: int,表示业绩统计周期（单位：月）
+    :param top_n: int,排前n的数据，最差的n个，或者最好的n个
+    :return:
+    """
     # 先将data_concat的index由string转成date
     # print(data_concat.index)
     # exit()
     data_concat.index = pd.to_datetime(data_concat.index)
     # 转换时间频率：日=》月
     data_month = data_concat.resample('M').last()
-    # 计算过去n个月的收益率 = 期末值/期初值 -1  = （期末 - 期初） / 期初
+    # 计算过去shift_n个月的收益率 = 期末值/期初值 -1  = （期末 - 期初） / 期初
     # optional: 对数收益率 = log(期末值/期初值）
     shift_return = data_month / data_month.shift(shift_n) - 1
-    print(shift_return.head(10))
+    print(shift_return.head(5))
     # 生成交易信号： 收益率排前n的->赢家组合->买入->1,排最后n个-》输家-》卖出-》1
 
     buy_signals = get_top_stocks(shift_return, top_n)
     sell_signals = get_top_stocks(-1 * shift_return, top_n)
     signal = buy_signals - sell_signals
-    print(signal)
+    print(signal.head(5))
     # print(buy_signals)
     # print(sell_signals)
-    exit()
-    # 数据预览
-    return shift_return
+
+    # 计算投资组合收益率
+    returns = base.calculate_portfolio_return(shift_return, signal, top_n * 2)
+    print(returns)
+    
+    # 评估策略效果：总收益率、年收益率、最大回撤、夏普比
+    base.evaluate_strategy(returns)
+    return returns
 
 
 def get_top_stocks(res, top_n):
     """
     找到前n位的极值，并转换为信号返回
-    :param res:
-    :param top_n:
+    :param res:df
+    :param top_n: int,表示要产生信号的个数
     :return signals: df, 返回0/1数据表
     """
     # 初始化信号容器
@@ -82,6 +96,7 @@ def get_top_stocks(res, top_n):
 
 if __name__ == '__main__':
     # 测试获取沪深300数据
-    data = get_data('2019-01-01', '2021-04-04', ['date', 'close'])
+    data = get_data('2020-01-01', '2021-04-04', ['date', 'close'])
     # 测试： 动量策略
-    momentum(data)
+    returns = momentum(data)
+    returns.plot()
